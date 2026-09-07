@@ -164,6 +164,9 @@ class CueOverlayView(context: Context) : View(context) {
                 if (focus <= 0.01f) continue
                 radius *= focus
             }
+
+            // Alternate dot colors so half are white and half are black, interspersed.
+            paint.color = if (p.isWhite) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
             canvas.drawCircle(px, py, radius, paint)
         }
     }
@@ -234,6 +237,9 @@ class CueOverlayView(context: Context) : View(context) {
                 p.homeX = nx + jitterX
                 p.homeY = ny + jitterY
                 p.size = DOT_SIZE_PX * (0.85f + rng.nextFloat() * 0.3f)
+                // Checkerboard assignment gives half the particles white, half black,
+                // interspersed across the grid.
+                p.isWhite = ((row + col) % 2 == 0)
             }
         }
     }
@@ -242,6 +248,7 @@ class CueOverlayView(context: Context) : View(context) {
         var homeX = 0f
         var homeY = 0f
         var size = 0f
+        var isWhite = true
     }
 
     companion object {
