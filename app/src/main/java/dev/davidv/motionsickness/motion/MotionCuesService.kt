@@ -16,11 +16,10 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import dev.davidv.motionsickness.MainActivity
 import dev.davidv.motionsickness.R
 import kotlinx.coroutines.CoroutineScope
@@ -101,14 +100,20 @@ class MotionCuesService : Service() {
         }
         windowManager.addView(view, params)
 
-        // Prefer the WindowInsetsControllerCompat API to hide system bars instead of the
-        // deprecated FLAG_FULLSCREEN. For overlay windows we can obtain a controller from the
-        // attached view. If the compat controller is unavailable (very old devices), fall back
-        // to the deprecated flag.
-        val controller = ViewCompat.getWindowInsetsController(view)
-        if (controller != null) {
-            controller.hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        // Prefer the platform WindowInsetsController on API 30+ instead of the deprecated
+        // ViewCompat.getWindowInsetsController. For overlay windows we can obtain the
+        // controller from the attached view (platform API). If unavailable or on older
+        // devices, fall back to the deprecated FLAG_FULLSCREEN.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val controller = view.windowInsetsController
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                @Suppress("DEPRECATION")
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_FULLSCREEN
+                windowManager.updateViewLayout(view, params)
+            }
         } else {
             @Suppress("DEPRECATION")
             params.flags = params.flags or WindowManager.LayoutParams.FLAG_FULLSCREEN
