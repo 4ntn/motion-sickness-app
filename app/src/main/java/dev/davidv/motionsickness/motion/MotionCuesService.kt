@@ -18,6 +18,9 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import dev.davidv.motionsickness.MainActivity
 import dev.davidv.motionsickness.R
 import kotlinx.coroutines.CoroutineScope
@@ -84,8 +87,7 @@ class MotionCuesService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -98,6 +100,21 @@ class MotionCuesService : Service() {
             }
         }
         windowManager.addView(view, params)
+
+        // Prefer the WindowInsetsControllerCompat API to hide system bars instead of the
+        // deprecated FLAG_FULLSCREEN. For overlay windows we can obtain a controller from the
+        // attached view. If the compat controller is unavailable (very old devices), fall back
+        // to the deprecated flag.
+        val controller = ViewCompat.getWindowInsetsController(view)
+        if (controller != null) {
+            controller.hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        } else {
+            @Suppress("DEPRECATION")
+            params.flags = params.flags or WindowManager.LayoutParams.FLAG_FULLSCREEN
+            windowManager.updateViewLayout(view, params)
+        }
+
         overlayView = view
     }
 
