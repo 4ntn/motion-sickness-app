@@ -152,6 +152,18 @@ fun MainScreen(
         DotStylePicker(selected = appearance.style, onSelect = cueSettings::setStyle)
 
         Text(
+            stringResource(R.string.main_size),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Slider(
+            value = appearance.size,
+            onValueChange = cueSettings::setSize,
+            valueRange = DotAppearance.MIN_SIZE..DotAppearance.MAX_SIZE,
+        )
+
+        Text(
             stringResource(R.string.main_opacity),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,

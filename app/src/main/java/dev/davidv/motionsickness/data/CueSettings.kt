@@ -14,9 +14,13 @@ import kotlinx.coroutines.flow.update
 
 data class DotAppearance(
     val style: DotStyle = DotStyle.White,
+    val size: Float = DEFAULT_SIZE,
     val opacity: Float = DEFAULT_OPACITY,
 ) {
     companion object {
+        const val DEFAULT_SIZE = 1f
+        const val MIN_SIZE = 0.5f
+        const val MAX_SIZE = 2f
         const val DEFAULT_OPACITY = 0.85f
         const val MIN_OPACITY = 0.5f
     }
@@ -33,6 +37,8 @@ class CueSettings private constructor(private val prefs: SharedPreferences) {
         DotAppearance(
             style = DotStyle.entries.firstOrNull { it.name == prefs.getString(KEY_STYLE, null) }
                 ?: DotStyle.White,
+            size = prefs.getFloat(KEY_SIZE, DotAppearance.DEFAULT_SIZE)
+                .coerceIn(DotAppearance.MIN_SIZE, DotAppearance.MAX_SIZE),
             opacity = prefs.getFloat(KEY_OPACITY, DotAppearance.DEFAULT_OPACITY)
                 .coerceIn(DotAppearance.MIN_OPACITY, 1f),
         ),
@@ -44,6 +50,12 @@ class CueSettings private constructor(private val prefs: SharedPreferences) {
         prefs.edit { putString(KEY_STYLE, style.name) }
     }
 
+    fun setSize(size: Float) {
+        val clamped = size.coerceIn(DotAppearance.MIN_SIZE, DotAppearance.MAX_SIZE)
+        _appearance.update { it.copy(size = clamped) }
+        prefs.edit { putFloat(KEY_SIZE, clamped) }
+    }
+
     fun setOpacity(opacity: Float) {
         val clamped = opacity.coerceIn(DotAppearance.MIN_OPACITY, 1f)
         _appearance.update { it.copy(opacity = clamped) }
@@ -53,6 +65,7 @@ class CueSettings private constructor(private val prefs: SharedPreferences) {
     companion object {
         private const val PREFS_NAME = "cue_settings"
         private const val KEY_STYLE = "dot_style"
+        private const val KEY_SIZE = "dot_size"
         private const val KEY_OPACITY = "dot_opacity"
 
         @Volatile private var instance: CueSettings? = null

@@ -64,6 +64,7 @@ class CueOverlayView(context: Context) : View(context) {
 
     @Volatile var mode: CueMode = CueMode.Focus
     private var style: DotStyle = DotStyle.White
+    private var sizeScale = DotAppearance.DEFAULT_SIZE
 
     private var gridVx = 0f
     private var gridVy = 0f
@@ -84,11 +85,12 @@ class CueOverlayView(context: Context) : View(context) {
     }
 
     /**
-     * Applies the user's dot style and opacity. Opacity goes on the whole view rather than the
+     * Applies the user's dot style, size and opacity. Opacity goes on the whole view rather than the
      * paint, so styles made of overlapping fills (outlined dots) stay crisp at any opacity.
      */
     fun setAppearance(appearance: DotAppearance) {
         style = appearance.style
+        sizeScale = appearance.size
         alpha = appearance.opacity
         invalidate()
     }
@@ -152,7 +154,7 @@ class CueOverlayView(context: Context) : View(context) {
             val px = centerX + lx * halfShortDim
             val py = centerY - ly * halfShortDim
 
-            var radius = p.size * pixelDensity * sizeBoost * 0.5f
+            var radius = p.size * pixelDensity * sizeScale * sizeBoost * 0.5f
             if (focusMode) {
                 val dx = px - centerX
                 val dy = py - centerY
