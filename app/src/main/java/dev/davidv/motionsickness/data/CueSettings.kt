@@ -18,7 +18,7 @@ data class DotAppearance(
 ) {
     companion object {
         const val DEFAULT_OPACITY = 0.85f
-        const val MIN_OPACITY = 0.1f
+        const val MIN_OPACITY = 0.5f
     }
 }
 
