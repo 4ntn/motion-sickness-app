@@ -13,7 +13,7 @@ android {
     defaultConfig {
         applicationId = "dev.davidv.motionsickness"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 3
         versionName = "0.0.6"
     }
