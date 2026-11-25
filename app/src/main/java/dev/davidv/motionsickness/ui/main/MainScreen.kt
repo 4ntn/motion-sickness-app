@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -142,9 +143,20 @@ fun MainScreen(
 
         Spacer(Modifier.height(8.dp))
 
+        Text(
+            stringResource(R.string.main_style),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
         DotStylePicker(selected = appearance.style, onSelect = cueSettings::setStyle)
 
-        Text(stringResource(R.string.main_opacity), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            stringResource(R.string.main_opacity),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Slider(
             value = appearance.opacity,
             onValueChange = cueSettings::setOpacity,
