@@ -8,6 +8,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
+import android.view.Display
+import android.view.Surface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,9 +22,11 @@ import kotlin.math.sqrt
  * can reflect both translational and rotational motion of the phone through the world.
  *
  * [x], [y] are the screen-plane components of world-horizontal acceleration (+x right, +y up in
- * the device frame). [outOfPlane] is the signed component along the device's +Z axis (out of
- * the screen, toward the user). [rollRadians] is the angle of world-up projected onto the
- * screen — zero when upright portrait, ±π/2 when rotated to landscape.
+ * the display frame, i.e. as the screen is currently drawn, accounting for display rotation).
+ * [outOfPlane] is the signed component along the device's +Z axis (out of the screen, toward
+ * the user). [rollRadians] is the angle of world-up projected onto the display — zero when the
+ * displayed content is upright, ±π/2 when the device is tilted onto its side without the
+ * display rotating along (e.g. rotation lock).
  *
  * [yawRateRps] is the angular velocity around the world-vertical axis (rad/s). [pitchRateRps]
  * is the angular velocity around the world-horizontal axis perpendicular to the direction the
@@ -49,6 +54,20 @@ class MotionEstimator(context: Context) {
     private val linearAccel = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
     private val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+
+    // Sensors report in the device's natural frame, but the overlay is drawn in the display
+    // frame, which rotates with the foreground app (landscape, upside-down, ...). Track the
+    // display rotation so in-plane outputs can be expressed in display coordinates. A
+    // DisplayListener is needed because 90°↔270° flips don't change the overlay's size.
+    private val displayManager = context.getSystemService(DisplayManager::class.java)
+    private var displayRotation = Surface.ROTATION_0
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId == Display.DEFAULT_DISPLAY) refreshDisplayRotation()
+        }
+        override fun onDisplayAdded(displayId: Int) {}
+        override fun onDisplayRemoved(displayId: Int) {}
+    }
 
     private val _motion = MutableStateFlow(MotionVector.ZERO)
     val motion: StateFlow<MotionVector> = _motion.asStateFlow()
@@ -110,8 +129,8 @@ class MotionEstimator(context: Context) {
         val dt = if (lastAccelTsNs == 0L) 0.02f else ((tsNs - lastAccelTsNs) / 1e9f).coerceIn(0.001f, 0.2f)
         lastAccelTsNs = tsNs
         val alpha = dt / (ACCEL_TIME_CONSTANT_SEC + dt)
-        filteredX += alpha * (hx - filteredX)
-        filteredY += alpha * (hy - filteredY)
+        filteredX += alpha * (displayX(hx, hy) - filteredX)
+        filteredY += alpha * (displayY(hx, hy) - filteredY)
         filteredZ += alpha * (hz - filteredZ)
 
         // Cache the current linear-accel magnitude squared for stillness detection in the
@@ -120,10 +139,32 @@ class MotionEstimator(context: Context) {
 
         val projLenSq = ux * ux + uy * uy
         if (projLenSq > FLAT_ROLL_GUARD_SQ) {
-            lastRollRadians = atan2(ux, uy)
+            lastRollRadians = atan2(displayX(ux, uy), displayY(ux, uy))
         }
 
         publish()
+    }
+
+    // Rotate a device-frame screen-plane vector into the display frame. Display rotation is the
+    // rotation of the drawn content relative to the device, so device vectors rotate by the
+    // same angle counter-clockwise: e.g. at ROTATION_90 (device turned CCW, top to the left),
+    // the device's +x edge points up on screen and its +y edge points left.
+    private fun displayX(x: Float, y: Float): Float = when (displayRotation) {
+        Surface.ROTATION_90 -> -y
+        Surface.ROTATION_180 -> -x
+        Surface.ROTATION_270 -> y
+        else -> x
+    }
+
+    private fun displayY(x: Float, y: Float): Float = when (displayRotation) {
+        Surface.ROTATION_90 -> x
+        Surface.ROTATION_180 -> -y
+        Surface.ROTATION_270 -> -x
+        else -> y
+    }
+
+    private fun refreshDisplayRotation() {
+        displayRotation = displayManager.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: Surface.ROTATION_0
     }
 
     private fun updateGyro(gx: Float, gy: Float, gz: Float, tsNs: Long) {
@@ -190,6 +231,8 @@ class MotionEstimator(context: Context) {
     }
 
     fun start() {
+        refreshDisplayRotation()
+        displayManager.registerDisplayListener(displayListener, null)
         sensorManager.registerListener(listener, linearAccel, SensorManager.SENSOR_DELAY_GAME)
         sensorManager.registerListener(listener, rotationVector, SensorManager.SENSOR_DELAY_GAME)
         sensorManager.registerListener(listener, gyroscope, SensorManager.SENSOR_DELAY_GAME)
@@ -197,6 +240,7 @@ class MotionEstimator(context: Context) {
 
     fun stop() {
         sensorManager.unregisterListener(listener)
+        displayManager.unregisterDisplayListener(displayListener)
         hasRotation = false
         lastAccelTsNs = 0L
         lastGyroTsNs = 0L
