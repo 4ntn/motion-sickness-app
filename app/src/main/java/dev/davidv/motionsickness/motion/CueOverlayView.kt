@@ -44,14 +44,14 @@ class CueOverlayView(context: Context) : View(context) {
     @Volatile private var motionX = 0f
     @Volatile private var motionY = 0f
     @Volatile private var motionOutOfPlane = 0f
-    @Volatile private var yawRateRps = 0f
-    @Volatile private var pitchRateRps = 0f
+    @Volatile private var rotationX = 0f
+    @Volatile private var rotationY = 0f
 
     private var smoothedMotionX = 0f
     private var smoothedMotionY = 0f
     private var smoothedMotionOutOfPlane = 0f
-    private var smoothedYawRateRps = 0f
-    private var smoothedPitchRateRps = 0f
+    private var smoothedRotationX = 0f
+    private var smoothedRotationY = 0f
 
     private val pixelDensity = context.resources.displayMetrics.density
 
@@ -89,8 +89,8 @@ class CueOverlayView(context: Context) : View(context) {
         motionX = m.x
         motionY = m.y
         motionOutOfPlane = m.outOfPlane
-        yawRateRps = m.yawRateRps
-        pitchRateRps = m.pitchRateRps
+        rotationX = m.rotationX
+        rotationY = m.rotationY
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -172,8 +172,8 @@ class CueOverlayView(context: Context) : View(context) {
 
         // Rotation scrolls the grid directly — sustained rotation → sustained flow,
         // stop rotating → flow stops.
-        gridOx += smoothedYawRateRps * YAW_GAIN * dt
-        gridOy += smoothedPitchRateRps * PITCH_GAIN * dt
+        gridOx += smoothedRotationX * ROTATION_GAIN * dt
+        gridOy += smoothedRotationY * ROTATION_GAIN * dt
 
         val wrapSpan = 2f * GRID_EXTENT
         if (gridOx > GRID_EXTENT) gridOx -= wrapSpan
@@ -194,8 +194,8 @@ class CueOverlayView(context: Context) : View(context) {
         smoothedMotionY += alpha * (motionY - smoothedMotionY)
         smoothedMotionOutOfPlane += alpha * (motionOutOfPlane - smoothedMotionOutOfPlane)
 
-        smoothedYawRateRps += alpha * (yawRateRps - smoothedYawRateRps)
-        smoothedPitchRateRps += alpha * (pitchRateRps - smoothedPitchRateRps)
+        smoothedRotationX += alpha * (rotationX - smoothedRotationX)
+        smoothedRotationY += alpha * (rotationY - smoothedRotationY)
     }
 
     private fun resetParticles() {
@@ -231,8 +231,7 @@ class CueOverlayView(context: Context) : View(context) {
 
         private const val DRIVE_GAIN = 0.6f
         private const val DAMP = 2.7f
-        private const val YAW_GAIN = 1.2f
-        private const val PITCH_GAIN = 1.2f
+        private const val ROTATION_GAIN = 1.2f
         private const val DOT_SIZE_PX = 8f
 
         private const val SIZE_OUT_OF_PLANE_GAIN = 1.2f
