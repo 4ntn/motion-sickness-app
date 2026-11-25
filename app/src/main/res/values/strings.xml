@@ -14,4 +14,11 @@
     <string name="main_grant_overlay">Grant draw-over-apps permission</string>
     <string name="main_start">Start cues</string>
     <string name="main_stop">Stop cues</string>
+    <string name="main_opacity">Dot opacity</string>
+
+    <string name="dot_style_white">White dots</string>
+    <string name="dot_style_black">Black dots</string>
+    <string name="dot_style_split">Half white, half black dots</string>
+    <string name="dot_style_white_outlined">White dots with black outline</string>
+    <string name="dot_style_black_outlined">Black dots with white outline</string>
 </resources>

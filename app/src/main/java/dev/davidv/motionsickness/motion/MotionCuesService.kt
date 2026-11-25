@@ -22,6 +22,7 @@ import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import dev.davidv.motionsickness.MainActivity
 import dev.davidv.motionsickness.R
+import dev.davidv.motionsickness.data.CueSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -70,7 +71,13 @@ class MotionCuesService : Service() {
         motionEstimator.start()
         collectJob?.cancel()
         collectJob = scope.launch {
-            motionEstimator.motion.collectLatest { overlayView?.setMotion(it) }
+            launch { motionEstimator.motion.collectLatest { overlayView?.setMotion(it) } }
+            // StateFlow replays the current value, so the overlay starts with the saved
+            // appearance and then follows changes made in the app while it's running.
+            launch {
+                CueSettings.get(this@MotionCuesService).appearance
+                    .collect { overlayView?.setAppearance(it) }
+            }
         }
         _isRunning.value = true
         return START_STICKY

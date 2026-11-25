@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.view.Choreographer
 import android.view.View
+import dev.davidv.motionsickness.data.DotAppearance
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -62,6 +63,7 @@ class CueOverlayView(context: Context) : View(context) {
     private var centerY = 0f
 
     @Volatile var mode: CueMode = CueMode.Focus
+    private var style: DotStyle = DotStyle.White
 
     private var gridVx = 0f
     private var gridVy = 0f
@@ -72,17 +74,23 @@ class CueOverlayView(context: Context) : View(context) {
     private var lastFrameNs = 0L
     private var running = false
 
-    private val paint = Paint().apply {
-        isAntiAlias = true
-        color = 0xFFFFFFFF.toInt()
-        alpha = 217 // 0.85 * 255
-        style = Paint.Style.FILL
-    }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     init {
         setBackgroundColor(0)
         isClickable = false
         isFocusable = false
+        alpha = DotAppearance.DEFAULT_OPACITY
+    }
+
+    /**
+     * Applies the user's dot style and opacity. Opacity goes on the whole view rather than the
+     * paint, so styles made of overlapping fills (outlined dots) stay crisp at any opacity.
+     */
+    fun setAppearance(appearance: DotAppearance) {
+        style = appearance.style
+        alpha = appearance.opacity
+        invalidate()
     }
 
     fun setMotion(m: MotionVector) {
@@ -155,10 +163,7 @@ class CueOverlayView(context: Context) : View(context) {
                 if (focus <= 0.01f) continue
                 radius *= focus
             }
-
-            // Alternate dot colors so half are white and half are black, interspersed.
-            paint.color = if (p.isWhite) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
-            canvas.drawCircle(px, py, radius, paint)
+            style.draw(canvas, px, py, radius, paint)
         }
     }
 
@@ -217,9 +222,6 @@ class CueOverlayView(context: Context) : View(context) {
                 p.homeX = nx + jitterX
                 p.homeY = ny + jitterY
                 p.size = DOT_SIZE_PX * (0.85f + rng.nextFloat() * 0.3f)
-                // Checkerboard assignment gives half the particles white, half black,
-                // interspersed across the grid.
-                p.isWhite = ((row + col) % 2 == 0)
             }
         }
     }
@@ -228,7 +230,6 @@ class CueOverlayView(context: Context) : View(context) {
         var homeX = 0f
         var homeY = 0f
         var size = 0f
-        var isWhite = true
     }
 
     companion object {
