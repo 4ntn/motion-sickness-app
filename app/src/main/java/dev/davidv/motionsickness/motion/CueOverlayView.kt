@@ -8,11 +8,9 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.view.Choreographer
 import android.view.View
-import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -35,24 +33,23 @@ enum class CueMode { Uniform, Focus }
  * part of the window and are dimmed correctly, which is what lets the touch-through trick
  * work.
  *
- * The physics runs in a "leveled" isotropic frame whose +y axis tracks world-up projected
- * onto the screen. Positions rotate to screen coords at draw time. One iso unit = half the
- * shorter screen dimension, so rotation is rigid in pixel space regardless of viewport aspect.
+ * The grid is locked to the screen axes (it doesn't stay level with the ground when the phone
+ * tilts): lateral vehicle acceleration moves it left/right and longitudinal acceleration
+ * (speeding up / braking) moves it up/down. Positions live in an isotropic frame where one
+ * unit = half the shorter screen dimension, so motion speed is the same on both axes
+ * regardless of viewport aspect.
  */
 class CueOverlayView(context: Context) : View(context) {
 
     @Volatile private var motionX = 0f
     @Volatile private var motionY = 0f
     @Volatile private var motionOutOfPlane = 0f
-    @Volatile private var rollRadians = 0f
     @Volatile private var yawRateRps = 0f
     @Volatile private var pitchRateRps = 0f
 
     private var smoothedMotionX = 0f
     private var smoothedMotionY = 0f
     private var smoothedMotionOutOfPlane = 0f
-    private var smoothedRollCos = 1f
-    private var smoothedRollSin = 0f
     private var smoothedYawRateRps = 0f
     private var smoothedPitchRateRps = 0f
 
@@ -92,7 +89,6 @@ class CueOverlayView(context: Context) : View(context) {
         motionX = m.x
         motionY = m.y
         motionOutOfPlane = m.outOfPlane
-        rollRadians = m.rollRadians
         yawRateRps = m.yawRateRps
         pitchRateRps = m.pitchRateRps
     }
@@ -135,8 +131,6 @@ class CueOverlayView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         val sizeBoost = (1f + sizeEnvelope).coerceIn(1f, SIZE_BOOST_MAX)
-        val cosR = smoothedRollCos
-        val sinR = smoothedRollSin
         val ext = GRID_EXTENT
         val span = 2f * ext
 
@@ -145,13 +139,10 @@ class CueOverlayView(context: Context) : View(context) {
             // Apply global grid offset and wrap into the toroidal iso square.
             val lx = wrap(p.homeX + gridOx, ext, span)
             val ly = wrap(p.homeY + gridOy, ext, span)
-            // Rigid rotation in iso space.
-            val sx = lx * cosR + ly * sinR
-            val sy = -lx * sinR + ly * cosR
-            // Iso → pixels via uniform scale by halfShortDim. Rigid rotation in iso becomes
-            // rigid rotation in pixels. Y flipped (pixel +y is down; iso +y is up).
-            val px = centerX + sx * halfShortDim
-            val py = centerY - sy * halfShortDim
+            // Iso → pixels via uniform scale by halfShortDim. Y flipped (pixel +y is down;
+            // iso +y is up).
+            val px = centerX + lx * halfShortDim
+            val py = centerY - ly * halfShortDim
 
             var radius = p.size * pixelDensity * sizeBoost * 0.5f
             if (focusMode) {
@@ -169,13 +160,10 @@ class CueOverlayView(context: Context) : View(context) {
     }
 
     private fun step(dt: Float) {
-        val cosR = smoothedRollCos
-        val sinR = smoothedRollSin
-        val driveLx = smoothedMotionX * cosR - smoothedMotionY * sinR
-        val driveLy = smoothedMotionX * sinR + smoothedMotionY * cosR
-
-        gridVx += (-driveLx * DRIVE_GAIN) * dt
-        gridVy += (-driveLy * DRIVE_GAIN) * dt
+        // Dots drift opposite to the acceleration, like loose objects in the car: speeding up
+        // pushes them down the screen, braking pushes them up, a right turn pushes them left.
+        gridVx += (-smoothedMotionX * DRIVE_GAIN) * dt
+        gridVy += (-smoothedMotionY * DRIVE_GAIN) * dt
         val damping = exp(-DAMP * dt)
         gridVx *= damping
         gridVy *= damping
@@ -205,14 +193,6 @@ class CueOverlayView(context: Context) : View(context) {
         smoothedMotionX += alpha * (motionX - smoothedMotionX)
         smoothedMotionY += alpha * (motionY - smoothedMotionY)
         smoothedMotionOutOfPlane += alpha * (motionOutOfPlane - smoothedMotionOutOfPlane)
-
-        val targetCos = cos(rollRadians)
-        val targetSin = sin(rollRadians)
-        smoothedRollCos += alpha * (targetCos - smoothedRollCos)
-        smoothedRollSin += alpha * (targetSin - smoothedRollSin)
-        val invLen = 1f / sqrt(smoothedRollCos * smoothedRollCos + smoothedRollSin * smoothedRollSin)
-        smoothedRollCos *= invLen
-        smoothedRollSin *= invLen
 
         smoothedYawRateRps += alpha * (yawRateRps - smoothedYawRateRps)
         smoothedPitchRateRps += alpha * (pitchRateRps - smoothedPitchRateRps)

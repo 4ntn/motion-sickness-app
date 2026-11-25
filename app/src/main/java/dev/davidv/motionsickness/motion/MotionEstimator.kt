@@ -14,19 +14,22 @@ import android.view.Surface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlin.math.atan2
 import kotlin.math.sqrt
 
 /**
- * Horizontal-world acceleration in m/s^2, plus device roll and angular rates, so the renderer
- * can reflect both translational and rotational motion of the phone through the world.
+ * Horizontal-world acceleration in m/s^2 plus angular rates, mapped onto the screen axes so the
+ * renderer can move the dots along the screen (not along the ground) in response to how the
+ * vehicle moves.
  *
- * [x], [y] are the screen-plane components of world-horizontal acceleration (+x right, +y up in
- * the display frame, i.e. as the screen is currently drawn, accounting for display rotation).
- * [outOfPlane] is the signed component along the device's +Z axis (out of the screen, toward
- * the user). [rollRadians] is the angle of world-up projected onto the display — zero when the
- * displayed content is upright, ±π/2 when the device is tilted onto its side without the
- * display rotating along (e.g. rotation lock).
+ * World-horizontal acceleration is split along two horizontal directions tied to the screen:
+ * - [x] (lateral): along the screen's +x axis (as currently displayed) flattened onto the
+ *   ground plane — cornering forces.
+ * - [y] (longitudinal): the horizontal direction perpendicular to that, pointing away from the
+ *   viewer (the way you'd look through the screen) — accelerating and braking. Because it's measured horizontally, it works the
+ *   same whether the phone lies flat, is tilted back, or is held upright.
+ *
+ * [outOfPlane] is the signed component of horizontal acceleration along the device's +Z axis
+ * (out of the screen, toward the user).
  *
  * [yawRateRps] is the angular velocity around the world-vertical axis (rad/s). [pitchRateRps]
  * is the angular velocity around the world-horizontal axis perpendicular to the direction the
@@ -37,11 +40,10 @@ data class MotionVector(
     val x: Float,
     val y: Float,
     val outOfPlane: Float,
-    val rollRadians: Float,
     val yawRateRps: Float,
     val pitchRateRps: Float,
 ) {
-    companion object { val ZERO = MotionVector(0f, 0f, 0f, 0f, 0f, 0f) }
+    companion object { val ZERO = MotionVector(0f, 0f, 0f, 0f, 0f) }
 }
 
 /**
@@ -57,8 +59,8 @@ class MotionEstimator(context: Context) {
 
     // Sensors report in the device's natural frame, but the overlay is drawn in the display
     // frame, which rotates with the foreground app (landscape, upside-down, ...). Track the
-    // display rotation so in-plane outputs can be expressed in display coordinates. A
-    // DisplayListener is needed because 90°↔270° flips don't change the overlay's size.
+    // display rotation so "screen +x" means the displayed x axis. A DisplayListener is needed
+    // because 90°↔270° flips don't change the overlay's size.
     private val displayManager = context.getSystemService(DisplayManager::class.java)
     private var displayRotation = Surface.ROTATION_0
     private val displayListener = object : DisplayManager.DisplayListener {
@@ -78,7 +80,11 @@ class MotionEstimator(context: Context) {
     private var filteredX = 0f
     private var filteredY = 0f
     private var filteredZ = 0f
-    private var lastRollRadians = 0f
+    // World-frame (east, north) unit vector of the screen's lateral direction. Held at its last
+    // good value while the screen's x axis points nearly straight up/down and has no usable
+    // horizontal projection.
+    private var lateralE = 1f
+    private var lateralN = 0f
     private var filteredYawRate = 0f
     private var filteredPitchRate = 0f
     private var lastAccelTsNs = 0L
@@ -115,52 +121,67 @@ class MotionEstimator(context: Context) {
     }
 
     private fun updateAccel(ax: Float, ay: Float, az: Float, tsNs: Long) {
-        // Android convention: getRotationMatrixFromVector gives R such that world = R * device.
-        // The device-frame representation of world-up (0,0,1) is R^T * (0,0,1) = row 2 of R.
-        val ux = rotationMatrix[6]
-        val uy = rotationMatrix[7]
-        val uz = rotationMatrix[8]
+        // Android convention: getRotationMatrixFromVector gives R such that world = R * device,
+        // with world axes (east, north, up). Row 2 of R is world-up in device coordinates.
+        val r = rotationMatrix
+        val ux = r[6]
+        val uy = r[7]
+        val uz = r[8]
 
+        // Device-frame horizontal acceleration: only used for the out-of-plane size cue and
+        // for stillness detection.
         val dot = ax * ux + ay * uy + az * uz
         val hx = ax - dot * ux
         val hy = ay - dot * uy
         val hz = az - dot * uz
 
+        // Horizontal world acceleration (east, north). Dropping the world-up row of R is the
+        // projection onto the ground plane.
+        val accelE = r[0] * ax + r[1] * ay + r[2] * az
+        val accelN = r[3] * ax + r[4] * ay + r[5] * az
+
+        // Lateral direction = the displayed screen +x axis flattened onto the ground.
+        val sx = screenXAxisDeviceX()
+        val sy = screenXAxisDeviceY()
+        val latE = r[0] * sx + r[1] * sy
+        val latN = r[3] * sx + r[4] * sy
+        val latLenSq = latE * latE + latN * latN
+        if (latLenSq > SIDEWAYS_GUARD_SQ) {
+            val invLen = 1f / sqrt(latLenSq)
+            lateralE = latE * invLen
+            lateralN = latN * invLen
+        }
+        // Longitudinal = up × lateral: horizontal, pointing away from the viewer.
+        val lateral = accelE * lateralE + accelN * lateralN
+        val longitudinal = -accelE * lateralN + accelN * lateralE
+
         val dt = if (lastAccelTsNs == 0L) 0.02f else ((tsNs - lastAccelTsNs) / 1e9f).coerceIn(0.001f, 0.2f)
         lastAccelTsNs = tsNs
         val alpha = dt / (ACCEL_TIME_CONSTANT_SEC + dt)
-        filteredX += alpha * (displayX(hx, hy) - filteredX)
-        filteredY += alpha * (displayY(hx, hy) - filteredY)
+        filteredX += alpha * (lateral - filteredX)
+        filteredY += alpha * (longitudinal - filteredY)
         filteredZ += alpha * (hz - filteredZ)
 
         // Cache the current linear-accel magnitude squared for stillness detection in the
         // gyro handler (it typically ticks faster than accel).
         lastAccelMagSq = hx * hx + hy * hy + hz * hz
 
-        val projLenSq = ux * ux + uy * uy
-        if (projLenSq > FLAT_ROLL_GUARD_SQ) {
-            lastRollRadians = atan2(displayX(ux, uy), displayY(ux, uy))
-        }
-
         publish()
     }
 
-    // Rotate a device-frame screen-plane vector into the display frame. Display rotation is the
-    // rotation of the drawn content relative to the device, so device vectors rotate by the
-    // same angle counter-clockwise: e.g. at ROTATION_90 (device turned CCW, top to the left),
-    // the device's +x edge points up on screen and its +y edge points left.
-    private fun displayX(x: Float, y: Float): Float = when (displayRotation) {
-        Surface.ROTATION_90 -> -y
-        Surface.ROTATION_180 -> -x
-        Surface.ROTATION_270 -> y
-        else -> x
+    // The displayed screen's +x axis in device coordinates. Display rotation is the rotation of
+    // the drawn content relative to the device: e.g. at ROTATION_90 (device turned CCW, top to
+    // the left) the screen's +x points along the device's -y.
+    private fun screenXAxisDeviceX(): Float = when (displayRotation) {
+        Surface.ROTATION_90, Surface.ROTATION_270 -> 0f
+        Surface.ROTATION_180 -> -1f
+        else -> 1f
     }
 
-    private fun displayY(x: Float, y: Float): Float = when (displayRotation) {
-        Surface.ROTATION_90 -> x
-        Surface.ROTATION_180 -> -y
-        Surface.ROTATION_270 -> -x
-        else -> y
+    private fun screenXAxisDeviceY(): Float = when (displayRotation) {
+        Surface.ROTATION_90 -> -1f
+        Surface.ROTATION_270 -> 1f
+        else -> 0f
     }
 
     private fun refreshDisplayRotation() {
@@ -224,7 +245,6 @@ class MotionEstimator(context: Context) {
             x = filteredX,
             y = filteredY,
             outOfPlane = filteredZ,
-            rollRadians = lastRollRadians,
             yawRateRps = deadband(filteredYawRate, GYRO_DEADBAND_RPS),
             pitchRateRps = deadband(filteredPitchRate, GYRO_DEADBAND_RPS),
         )
@@ -247,7 +267,8 @@ class MotionEstimator(context: Context) {
         filteredX = 0f
         filteredY = 0f
         filteredZ = 0f
-        lastRollRadians = 0f
+        lateralE = 1f
+        lateralN = 0f
         filteredYawRate = 0f
         filteredPitchRate = 0f
         // Don't clear gx/gy/gzBias — bias is a hardware property; persist across stop/start.
@@ -260,7 +281,8 @@ class MotionEstimator(context: Context) {
         private const val ACCEL_TIME_CONSTANT_SEC = 0.08f
         private const val GYRO_TIME_CONSTANT_SEC = 0.03f
 
-        private const val FLAT_ROLL_GUARD_SQ = 0.04f
+        // Screen x axis must be at least ~12° away from vertical to define the lateral direction.
+        private const val SIDEWAYS_GUARD_SQ = 0.04f
         private const val FLAT_PITCH_GUARD_SQ = 0.04f
 
         // Stillness thresholds. Tight enough that actual motion doesn't count as still; loose
