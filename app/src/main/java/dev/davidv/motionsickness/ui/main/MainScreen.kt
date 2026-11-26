@@ -12,6 +12,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -160,15 +161,24 @@ fun MainScreen(
         CueLayoutPicker(selected = appearance.mode, onSelect = cueSettings::setMode)
 
         Text(stringResource(R.string.main_style), style = MaterialTheme.typography.bodyMedium)
-        DotStylePicker(
-            selected = appearance.style,
-            hue = appearance.hue,
-            onSelect = cueSettings::setStyle,
-        )
+        // No spacing here: the hue section carries its own leading gap so it animates with it,
+        // instead of the outer spacedBy adding/removing it instantly.
+        Column {
+            DotStylePicker(
+                selected = appearance.style,
+                hue = appearance.hue,
+                onSelect = cueSettings::setStyle,
+            )
 
-        if (appearance.style == DotStyle.Color) {
-            Text(stringResource(R.string.main_hue), style = MaterialTheme.typography.bodyMedium)
-            HueSlider(hue = appearance.hue, onHueChange = cueSettings::setHue)
+            AnimatedVisibility(visible = appearance.style == DotStyle.Color) {
+                Column(
+                    Modifier.padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(stringResource(R.string.main_hue), style = MaterialTheme.typography.bodyMedium)
+                    HueSlider(hue = appearance.hue, onHueChange = cueSettings::setHue)
+                }
+            }
         }
 
         Text(stringResource(R.string.main_size), style = MaterialTheme.typography.bodyMedium)
