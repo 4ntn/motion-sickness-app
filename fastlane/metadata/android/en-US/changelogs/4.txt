@@ -1,0 +1,5 @@
+- New layouts: Columns, Edges and Focus, with live previews
+- New dot styles: white, black, half and half, outlined, and any color with a hue picker
+- Size slider; minimum opacity raised so dots stay visible
+- Smoother dot animation
+- Fixed landscape mode; removed roll from the motion estimate
