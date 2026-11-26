@@ -309,8 +309,8 @@ private fun HueSlider(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Brush.horizontalGradient(hueTrackColors)),
             )
         },
