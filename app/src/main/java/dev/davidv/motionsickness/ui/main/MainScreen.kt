@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -299,12 +300,26 @@ private fun HueSlider(
     onHueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = SliderDefaults.colors(thumbColor = Color(hueToColor(hue)))
+    val interactionSource = remember { MutableInteractionSource() }
     Slider(
         value = hue,
         onValueChange = onHueChange,
         modifier = modifier,
         valueRange = 0f..DotAppearance.MAX_HUE,
-        colors = SliderDefaults.colors(thumbColor = Color(hueToColor(hue))),
+        colors = colors,
+        interactionSource = interactionSource,
+        thumb = {
+            // Background-colored margin around the thumb cuts a gap into the track, like the
+            // default slider's, and hides the track's tip when the thumb is at either end.
+            Box(
+                Modifier
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 6.dp),
+            ) {
+                SliderDefaults.Thumb(interactionSource = interactionSource, colors = colors)
+            }
+        },
         track = {
             Box(
                 Modifier
