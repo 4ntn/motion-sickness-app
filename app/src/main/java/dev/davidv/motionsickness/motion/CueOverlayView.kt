@@ -12,16 +12,7 @@ import dev.davidv.motionsickness.data.DotAppearance
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sqrt
 import kotlin.random.Random
-
-/**
- * How the dot sizes scale with screen position.
- * - [Uniform]: every dot at the same base size, covering the whole screen.
- * - [Focus]: dots fade to zero near the center and reach full size at the edges/corners, so
- *   the middle of the screen stays clear for content and motion cues stay in peripheral vision.
- */
-enum class CueMode { Uniform, Focus }
 
 /**
  * Overlay view that renders the infinite dot field with a hardware-accelerated `Canvas`.
@@ -39,6 +30,8 @@ enum class CueMode { Uniform, Focus }
  * (speeding up / braking) moves it up/down. Positions live in an isotropic frame where one
  * unit = half the shorter screen dimension, so motion speed is the same on both axes
  * regardless of viewport aspect.
+ *
+ * Which dots are shown, and how big, depends on the [CueMode] layout (see [sizeFactor]).
  */
 class CueOverlayView(context: Context) : View(context) {
 
@@ -56,13 +49,11 @@ class CueOverlayView(context: Context) : View(context) {
 
     private val pixelDensity = context.resources.displayMetrics.density
 
-    private val particles = Array(PARTICLE_COUNT) { Particle() }
+    private var mode = DotAppearance().mode
+    private var particles = Array(mode.gridDim * mode.gridDim) { Particle() }
     private var halfShortDim = 1f
-    private var halfDiag = 1f
     private var centerX = 0f
     private var centerY = 0f
-
-    @Volatile var mode: CueMode = CueMode.Focus
     private var style: DotStyle = DotStyle.White
     private var sizeScale = DotAppearance.DEFAULT_SIZE
 
@@ -92,6 +83,11 @@ class CueOverlayView(context: Context) : View(context) {
         style = appearance.style
         sizeScale = appearance.size
         alpha = appearance.opacity
+        if (appearance.mode != mode) {
+            val oldDim = mode.gridDim
+            mode = appearance.mode
+            if (mode.gridDim != oldDim) resetParticles()
+        }
         invalidate()
     }
 
@@ -106,7 +102,6 @@ class CueOverlayView(context: Context) : View(context) {
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         halfShortDim = min(w, h) / 2f
-        halfDiag = sqrt((w.toFloat() * w + h.toFloat() * h)) / 2f
         centerX = w / 2f
         centerY = h / 2f
         resetParticles()
@@ -144,7 +139,8 @@ class CueOverlayView(context: Context) : View(context) {
         val ext = GRID_EXTENT
         val span = 2f * ext
 
-        val focusMode = mode == CueMode.Focus
+        val w = width.toFloat()
+        val h = height.toFloat()
         for (p in particles) {
             // Apply global grid offset and wrap into the toroidal iso square.
             val lx = wrap(p.homeX + gridOx, ext, span)
@@ -154,17 +150,9 @@ class CueOverlayView(context: Context) : View(context) {
             val px = centerX + lx * halfShortDim
             val py = centerY - ly * halfShortDim
 
-            var radius = p.size * pixelDensity * sizeScale * sizeBoost * 0.5f
-            if (focusMode) {
-                val dx = px - centerX
-                val dy = py - centerY
-                // Normalize by half-diagonal → 0 at center, 1 at corners. Smoothstep gives a
-                // clear empty zone in the middle and full-size dots only near the edges.
-                val distNorm = sqrt(dx * dx + dy * dy) / halfDiag
-                val focus = smoothstep(FOCUS_INNER, FOCUS_OUTER, distNorm)
-                if (focus <= 0.01f) continue
-                radius *= focus
-            }
+            val factor = mode.sizeFactor(px, py, w, h, halfShortDim)
+            if (factor <= 0.01f) continue
+            val radius = p.size * pixelDensity * sizeScale * sizeBoost * 0.5f * factor
             style.draw(canvas, px, py, radius, paint)
         }
     }
@@ -209,13 +197,15 @@ class CueOverlayView(context: Context) : View(context) {
     }
 
     private fun resetParticles() {
+        val dim = mode.gridDim
+        if (particles.size != dim * dim) particles = Array(dim * dim) { Particle() }
         val rng = Random(42)
-        val spacing = 2f * GRID_EXTENT / GRID_DIM
+        val spacing = mode.gridPitch
         var i = 0
         // Staggered layout: odd rows shifted by half a column → hex-like pattern.
-        for (row in 0 until GRID_DIM) {
+        for (row in 0 until dim) {
             val rowOffsetX = if (row % 2 == 1) spacing * 0.5f else 0f
-            for (col in 0 until GRID_DIM) {
+            for (col in 0 until dim) {
                 val nx = (col + 0.5f) * spacing - GRID_EXTENT + rowOffsetX
                 val ny = (row + 0.5f) * spacing - GRID_EXTENT
                 val jitterX = (rng.nextFloat() - 0.5f) * 0.04f
@@ -235,10 +225,6 @@ class CueOverlayView(context: Context) : View(context) {
     }
 
     companion object {
-        private const val GRID_DIM = 12
-        private const val PARTICLE_COUNT = GRID_DIM * GRID_DIM
-        private const val GRID_EXTENT = 3.5f
-
         private const val DRIVE_GAIN = 0.6f
         private const val DAMP = 2.7f
         private const val ROTATION_GAIN = 1.2f
@@ -250,20 +236,10 @@ class CueOverlayView(context: Context) : View(context) {
 
         private const val SMOOTH_TIME_SEC = 0.05f
 
-        // Focus-mode radial falloff: below FOCUS_INNER (normalized distance from center,
-        // 0=center 1=corner) dots are invisible; above FOCUS_OUTER they're full size.
-        private const val FOCUS_INNER = 0.25f
-        private const val FOCUS_OUTER = 0.9f
-
         private fun wrap(v: Float, ext: Float, span: Float): Float {
             var r = (v + ext) % span
             if (r < 0f) r += span
             return r - ext
-        }
-
-        private fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
-            val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
-            return t * t * (3f - 2f * t)
         }
     }
 }

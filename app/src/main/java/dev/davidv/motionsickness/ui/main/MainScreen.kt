@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -37,7 +38,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -56,9 +59,12 @@ import androidx.navigation3.runtime.NavKey
 import dev.davidv.motionsickness.R
 import dev.davidv.motionsickness.data.CueSettings
 import dev.davidv.motionsickness.data.DotAppearance
+import dev.davidv.motionsickness.motion.CueMode
 import dev.davidv.motionsickness.motion.DotStyle
 import dev.davidv.motionsickness.motion.MotionCuesService
 import dev.davidv.motionsickness.motion.draw
+import dev.davidv.motionsickness.motion.gridPitch
+import dev.davidv.motionsickness.motion.sizeFactor
 import dev.davidv.motionsickness.theme.MyApplicationTheme
 
 @Composable
@@ -142,6 +148,9 @@ fun MainScreen(
 
         Spacer(Modifier.height(8.dp))
 
+        Text(stringResource(R.string.main_layout), style = MaterialTheme.typography.bodyMedium)
+        CueLayoutPicker(selected = appearance.mode, onSelect = cueSettings::setMode)
+
         Text(stringResource(R.string.main_style), style = MaterialTheme.typography.bodyMedium)
         DotStylePicker(selected = appearance.style, onSelect = cueSettings::setStyle)
 
@@ -158,6 +167,62 @@ fun MainScreen(
             onValueChange = cueSettings::setOpacity,
             valueRange = DotAppearance.MIN_OPACITY..1f,
         )
+    }
+}
+
+/**
+ * Row of miniature phone screens, one per [CueMode], showing where that layout puts the dots.
+ * Dots are scaled with the same [sizeFactor] the overlay uses, so the preview matches it.
+ */
+@Composable
+private fun CueLayoutPicker(
+    selected: CueMode,
+    onSelect: (CueMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dotColor = MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier.fillMaxWidth().selectableGroup(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        for (mode in CueMode.entries) {
+            val isSelected = mode == selected
+            val shape = RoundedCornerShape(8.dp)
+            Column(
+                Modifier.selectable(selected = isSelected, role = Role.RadioButton) { onSelect(mode) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Canvas(
+                    Modifier
+                        .size(width = 56.dp, height = 96.dp)
+                        .clip(shape)
+                        .border(
+                            width = if (isSelected) 3.dp else 1.dp,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outlineVariant,
+                            shape = shape,
+                        ),
+                ) {
+                    val unit = size.minDimension / 2f
+                    val pitch = mode.gridPitch * unit
+                    val dotRadius = 2.dp.toPx()
+                    // Hex grid centered on the tile, like the overlay's at rest.
+                    val rows = (size.height / pitch).toInt() / 2 + 1
+                    val cols = (size.width / pitch).toInt() / 2 + 1
+                    for (row in -rows..rows) {
+                        val y = center.y + row * pitch
+                        val rowOffset = if (row % 2 != 0) pitch / 2f else 0f
+                        for (col in -cols..cols) {
+                            val x = center.x + col * pitch + rowOffset
+                            val f = mode.sizeFactor(x, y, size.width, size.height, unit)
+                            if (f > 0.01f) drawCircle(dotColor, dotRadius * f, Offset(x, y))
+                        }
+                    }
+                }
+                Text(stringResource(mode.label), style = MaterialTheme.typography.labelMedium)
+            }
+        }
     }
 }
 
