@@ -13,8 +13,10 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,8 +30,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -42,6 +46,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
@@ -64,6 +70,7 @@ import dev.davidv.motionsickness.motion.DotStyle
 import dev.davidv.motionsickness.motion.MotionCuesService
 import dev.davidv.motionsickness.motion.draw
 import dev.davidv.motionsickness.motion.gridPitch
+import dev.davidv.motionsickness.motion.hueToColor
 import dev.davidv.motionsickness.motion.sizeFactor
 import dev.davidv.motionsickness.theme.MyApplicationTheme
 
@@ -152,7 +159,16 @@ fun MainScreen(
         CueLayoutPicker(selected = appearance.mode, onSelect = cueSettings::setMode)
 
         Text(stringResource(R.string.main_style), style = MaterialTheme.typography.bodyMedium)
-        DotStylePicker(selected = appearance.style, onSelect = cueSettings::setStyle)
+        DotStylePicker(
+            selected = appearance.style,
+            hue = appearance.hue,
+            onSelect = cueSettings::setStyle,
+        )
+
+        if (appearance.style == DotStyle.Color) {
+            Text(stringResource(R.string.main_hue), style = MaterialTheme.typography.bodyMedium)
+            HueSlider(hue = appearance.hue, onHueChange = cueSettings::setHue)
+        }
 
         Text(stringResource(R.string.main_size), style = MaterialTheme.typography.bodyMedium)
         Slider(
@@ -234,10 +250,12 @@ private fun CueLayoutPicker(
 @Composable
 private fun DotStylePicker(
     selected: DotStyle,
+    hue: Float,
     onSelect: (DotStyle) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val paint = remember { Paint(Paint.ANTI_ALIAS_FLAG) }
+    val color = remember(hue) { hueToColor(hue) }
     Row(
         modifier.fillMaxWidth().selectableGroup(),
         horizontalArrangement = Arrangement.SpaceEvenly,
@@ -260,11 +278,43 @@ private fun DotStylePicker(
                     .padding(6.dp),
             ) {
                 drawIntoCanvas {
-                    style.draw(it.nativeCanvas, center.x, center.y, size.minDimension / 2f, paint)
+                    style.draw(it.nativeCanvas, center.x, center.y, size.minDimension / 2f, paint, color)
                 }
             }
         }
     }
+}
+
+/** Hue stops every 60° so the gradient passes through all primaries and secondaries. */
+private val hueTrackColors = (0..6).map { Color(hueToColor(it * 60f)) }
+
+/**
+ * Slider for the [DotStyle.Color] hue. The track is a rainbow at the same fixed saturation and
+ * brightness the dots use, and the thumb takes the selected color.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HueSlider(
+    hue: Float,
+    onHueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Slider(
+        value = hue,
+        onValueChange = onHueChange,
+        modifier = modifier,
+        valueRange = 0f..DotAppearance.MAX_HUE,
+        colors = SliderDefaults.colors(thumbColor = Color(hueToColor(hue))),
+        track = {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Brush.horizontalGradient(hueTrackColors)),
+            )
+        },
+    )
 }
 
 private fun hasNotificationPermission(context: android.content.Context): Boolean {

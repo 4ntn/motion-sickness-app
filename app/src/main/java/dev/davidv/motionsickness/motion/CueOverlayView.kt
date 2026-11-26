@@ -56,6 +56,7 @@ class CueOverlayView(context: Context) : View(context) {
     private var centerY = 0f
     private var style: DotStyle = DotStyle.White
     private var sizeScale = DotAppearance.DEFAULT_SIZE
+    private var dotColor = hueToColor(DotAppearance.DEFAULT_HUE)
 
     private var gridVx = 0f
     private var gridVy = 0f
@@ -82,6 +83,7 @@ class CueOverlayView(context: Context) : View(context) {
     fun setAppearance(appearance: DotAppearance) {
         style = appearance.style
         sizeScale = appearance.size
+        dotColor = hueToColor(appearance.hue)
         alpha = appearance.opacity
         if (appearance.mode != mode) {
             val oldDim = mode.gridDim
@@ -153,7 +155,7 @@ class CueOverlayView(context: Context) : View(context) {
             val factor = mode.sizeFactor(px, py, w, h, halfShortDim)
             if (factor <= 0.01f) continue
             val radius = p.size * pixelDensity * sizeScale * sizeBoost * 0.5f * factor
-            style.draw(canvas, px, py, radius, paint)
+            style.draw(canvas, px, py, radius, paint, dotColor)
         }
     }
 

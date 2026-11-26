@@ -18,8 +18,12 @@ data class DotAppearance(
     val size: Float = DEFAULT_SIZE,
     val opacity: Float = DEFAULT_OPACITY,
     val mode: CueMode = CueMode.Columns,
+    /** Hue in degrees for [DotStyle.Color]. */
+    val hue: Float = DEFAULT_HUE,
 ) {
     companion object {
+        const val DEFAULT_HUE = 200f
+        const val MAX_HUE = 360f
         const val DEFAULT_SIZE = 1f
         const val MIN_SIZE = 0.5f
         const val MAX_SIZE = 2f
@@ -45,6 +49,8 @@ class CueSettings private constructor(private val prefs: SharedPreferences) {
                 .coerceIn(DotAppearance.MIN_OPACITY, 1f),
             mode = CueMode.entries.firstOrNull { it.name == prefs.getString(KEY_MODE, null) }
                 ?: DotAppearance().mode,
+            hue = prefs.getFloat(KEY_HUE, DotAppearance.DEFAULT_HUE)
+                .coerceIn(0f, DotAppearance.MAX_HUE),
         ),
     )
     val appearance: StateFlow<DotAppearance> = _appearance.asStateFlow()
@@ -71,12 +77,19 @@ class CueSettings private constructor(private val prefs: SharedPreferences) {
         prefs.edit { putFloat(KEY_OPACITY, clamped) }
     }
 
+    fun setHue(hue: Float) {
+        val clamped = hue.coerceIn(0f, DotAppearance.MAX_HUE)
+        _appearance.update { it.copy(hue = clamped) }
+        prefs.edit { putFloat(KEY_HUE, clamped) }
+    }
+
     companion object {
         private const val PREFS_NAME = "cue_settings"
         private const val KEY_STYLE = "dot_style"
         private const val KEY_SIZE = "dot_size"
         private const val KEY_OPACITY = "dot_opacity"
         private const val KEY_MODE = "cue_mode"
+        private const val KEY_HUE = "dot_hue"
 
         @Volatile private var instance: CueSettings? = null
 
