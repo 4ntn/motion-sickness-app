@@ -1,1 +1,14 @@
 Motion Cues reduces motion sickness by drawing drifting dots over other apps while you ride in a car, bus, or train.
+
+The dots move with the vehicle's acceleration and turns, so what you see matches what you feel. Touches pass through to the app underneath, and it works in portrait and landscape.
+
+Features:
+<ul>
+<li>Start and stop from the app, the Quick Settings tile, or the notification</li>
+<li>Layouts: Columns, Edges, or Focus (keeps the center of the screen clear), with a live preview</li>
+<li>Dot styles: white, black, half white and half black, outlined, or any color you pick</li>
+<li>Adjustable dot size and opacity</li>
+<li>Changes apply right away and are remembered</li>
+</ul>
+
+You need to turn the overlay on yourself; it does not start automatically.
