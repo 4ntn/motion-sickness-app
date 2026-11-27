@@ -65,7 +65,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.navigation3.runtime.NavKey
 import dev.davidv.motionsickness.R
 import dev.davidv.motionsickness.data.CueSettings
 import dev.davidv.motionsickness.data.DotAppearance
@@ -80,7 +79,6 @@ import dev.davidv.motionsickness.theme.MyApplicationTheme
 
 @Composable
 fun MainScreen(
-    onItemClick: (NavKey) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -356,5 +354,5 @@ private fun hasNotificationPermission(context: android.content.Context): Boolean
 @Preview(showBackground = true)
 @Composable
 fun MainScreenPreview() {
-    MyApplicationTheme { MainScreen(onItemClick = {}) }
+    MyApplicationTheme { MainScreen() }
 }
