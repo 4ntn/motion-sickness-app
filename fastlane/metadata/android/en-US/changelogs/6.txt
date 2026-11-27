@@ -1,0 +1,3 @@
+- Lower battery use: the overlay stops redrawing when there is no motion, and sensors pause while the screen is off
+- More stable motion tracking inside vehicles, unaffected by magnetic interference
+- Smaller app size and fewer permissions

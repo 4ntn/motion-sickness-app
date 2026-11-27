@@ -4,7 +4,6 @@
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
-  alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -14,8 +13,8 @@ android {
         applicationId = "dev.davidv.motionsickness"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.2.0"
+        versionCode = 6
+        versionName = "1.0.0"
     }
 
     buildTypes {
@@ -42,49 +41,39 @@ android {
       shaders = false
     }
 
+    // The app is English-only; drop library translations from resources.arsc.
+    androidResources {
+      localeFilters += "en"
+    }
+
+    // Don't embed the (Google-signed) dependency metadata block.
+    dependenciesInfo {
+      includeInApk = false
+      includeInBundle = false
+    }
+
     packaging {
       resources {
-        excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        excludes += listOf(
+          "/META-INF/{AL2.0,LGPL2.1}",
+          "/META-INF/*.version",
+          "/kotlin/**",
+          "kotlin-tooling-metadata.json",
+          // kotlinx-coroutines debug agent
+          "DebugProbesKt.bin",
+        )
       }
     }
 }
 
 dependencies {
-  val composeBom = platform(libs.androidx.compose.bom)
-  implementation(composeBom)
-  androidTestImplementation(composeBom)
+  implementation(platform(libs.androidx.compose.bom))
 
-  // Core Android dependencies
   implementation(libs.androidx.core.ktx)
-  implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.activity.compose)
-
-  // Arch Components
   implementation(libs.androidx.lifecycle.runtime.compose)
-  implementation(libs.androidx.lifecycle.viewmodel.compose)
-
-  // Compose
   implementation(libs.androidx.compose.ui)
-  implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
-  // Tooling
-  debugImplementation(libs.androidx.compose.ui.tooling)
-  // Instrumented tests
-  androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-  debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-  // Local tests: jUnit, coroutines, Android runner
   testImplementation(libs.junit)
-  testImplementation(libs.kotlinx.coroutines.test)
-
-  // Instrumented tests: jUnit rules and runners
-  androidTestImplementation(libs.androidx.test.core)
-  androidTestImplementation(libs.androidx.test.ext.junit)
-  androidTestImplementation(libs.androidx.test.runner)
-  androidTestImplementation(libs.androidx.test.espresso.core)
-
-  // Navigation
-  implementation(libs.androidx.navigation3.ui)
-  implementation(libs.androidx.navigation3.runtime)
-  implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 }
