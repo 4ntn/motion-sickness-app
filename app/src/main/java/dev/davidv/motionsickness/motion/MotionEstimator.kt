@@ -11,9 +11,6 @@ import android.hardware.SensorManager
 import android.hardware.display.DisplayManager
 import android.view.Display
 import android.view.Surface
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.abs
 import kotlin.math.sign
 import kotlin.math.sqrt
@@ -55,6 +52,7 @@ data class MotionVector(
 /**
  * Fuses linear-acceleration, rotation-vector, and gyroscope data into the inputs the renderer
  * needs to make the dot field feel like a fixed world you're moving and rotating through.
+ * Results are delivered to [onMotion] on the main thread, once per sensor event.
  *
  * The viewer's orientation is the display edge gravity points at, the same way the system
  * picks screen orientation, with hysteresis so it doesn't flicker near 45°. This is computed
@@ -64,7 +62,11 @@ class MotionEstimator(context: Context) {
 
     private val sensorManager = context.getSystemService(SensorManager::class.java)
     private val linearAccel = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
-    private val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+    // The game rotation vector skips the magnetometer: cheaper, and immune to the magnetic
+    // disturbances inside vehicles. Absolute heading doesn't matter here — every quantity we
+    // derive is either along world-up or a dot product within the horizontal plane.
+    private val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+        ?: sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
     // Sensors report in the device's natural frame, but the overlay is drawn in the display
@@ -82,8 +84,10 @@ class MotionEstimator(context: Context) {
         override fun onDisplayRemoved(displayId: Int) {}
     }
 
-    private val _motion = MutableStateFlow(MotionVector.ZERO)
-    val motion: StateFlow<MotionVector> = _motion.asStateFlow()
+    /** Receives each new estimate. Called on the main thread. */
+    var onMotion: ((MotionVector) -> Unit)? = null
+
+    private var started = false
 
     private val rotationMatrix = FloatArray(9)
     private var hasRotation = false
@@ -113,7 +117,7 @@ class MotionEstimator(context: Context) {
     private val listener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
             when (event.sensor.type) {
-                Sensor.TYPE_ROTATION_VECTOR -> {
+                Sensor.TYPE_GAME_ROTATION_VECTOR, Sensor.TYPE_ROTATION_VECTOR -> {
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
                     hasRotation = true
                 }
@@ -275,16 +279,18 @@ class MotionEstimator(context: Context) {
         val yaw = deadband(filteredYawRate, GYRO_DEADBAND_RPS)
         val pitch = deadband(filteredPitchRate, GYRO_DEADBAND_RPS)
         // Viewer's right = viewer's up turned 90° clockwise: (upY, -upX).
-        _motion.value = MotionVector(
-            x = filteredX,
-            y = filteredY,
-            outOfPlane = filteredZ,
+        onMotion?.invoke(MotionVector(
+            x = deadband(filteredX, ACCEL_DEADBAND),
+            y = deadband(filteredY, ACCEL_DEADBAND),
+            outOfPlane = deadband(filteredZ, ACCEL_DEADBAND),
             rotationX = yaw * viewerUpY + pitch * viewerUpX,
             rotationY = -yaw * viewerUpX + pitch * viewerUpY,
-        )
+        ))
     }
 
     fun start() {
+        if (started) return
+        started = true
         refreshDisplayRotation()
         displayManager.registerDisplayListener(displayListener, null)
         sensorManager.registerListener(listener, linearAccel, SensorManager.SENSOR_DELAY_GAME)
@@ -293,6 +299,8 @@ class MotionEstimator(context: Context) {
     }
 
     fun stop() {
+        if (!started) return
+        started = false
         sensorManager.unregisterListener(listener)
         displayManager.unregisterDisplayListener(displayListener)
         hasRotation = false
@@ -308,7 +316,7 @@ class MotionEstimator(context: Context) {
         // Don't clear gx/gy/gzBias — bias is a hardware property; persist across stop/start.
         stillAccumSec = 0f
         lastAccelMagSq = 0f
-        _motion.value = MotionVector.ZERO
+        onMotion?.invoke(MotionVector.ZERO)
     }
 
     companion object {
@@ -332,5 +340,8 @@ class MotionEstimator(context: Context) {
         private const val BIAS_TRACK_SEC = 1.5f
         // Residual rate below this is rounded to zero to kill micro-drift.
         private const val GYRO_DEADBAND_RPS = 0.01f // ~0.57 deg/s
+        // Same for acceleration: sensor noise on a still phone sits below this, while real
+        // vehicle acceleration is ~0.5–3 m/s². Lets the overlay settle and stop redrawing.
+        private const val ACCEL_DEADBAND = 0.05f // m/s²
     }
 }

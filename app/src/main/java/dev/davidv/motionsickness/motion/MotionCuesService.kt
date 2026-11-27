@@ -8,8 +8,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
@@ -20,6 +22,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import dev.davidv.motionsickness.MainActivity
 import dev.davidv.motionsickness.R
 import dev.davidv.motionsickness.data.CueSettings
@@ -30,7 +33,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -47,12 +49,24 @@ class MotionCuesService : Service() {
     private val scope = CoroutineScope(Dispatchers.Main)
     private var collectJob: Job? = null
 
+    // Nobody can see the overlay with the screen off, so stop the sensors meanwhile.
+    private var screenReceiverRegistered = false
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> motionEstimator.stop()
+                Intent.ACTION_SCREEN_ON -> motionEstimator.start()
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WindowManager::class.java)
         motionEstimator = MotionEstimator(this)
+        motionEstimator.onMotion = { overlayView?.setMotion(it) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -69,15 +83,13 @@ class MotionCuesService : Service() {
         startForegroundWithNotification()
         attachOverlay()
         motionEstimator.start()
+        registerScreenReceiver()
         collectJob?.cancel()
+        // StateFlow replays the current value, so the overlay starts with the saved
+        // appearance and then follows changes made in the app while it's running.
         collectJob = scope.launch {
-            launch { motionEstimator.motion.collectLatest { overlayView?.setMotion(it) } }
-            // StateFlow replays the current value, so the overlay starts with the saved
-            // appearance and then follows changes made in the app while it's running.
-            launch {
-                CueSettings.get(this@MotionCuesService).appearance
-                    .collect { overlayView?.setAppearance(it) }
-            }
+            CueSettings.get(this@MotionCuesService).appearance
+                .collect { overlayView?.setAppearance(it) }
         }
         _isRunning.value = true
         MotionCuesWidgetProvider.updateAll(this)
@@ -131,6 +143,23 @@ class MotionCuesService : Service() {
         overlayView = view
     }
 
+    private fun registerScreenReceiver() {
+        if (screenReceiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        // System broadcasts still reach a not-exported receiver.
+        ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        screenReceiverRegistered = true
+    }
+
+    private fun unregisterScreenReceiver() {
+        if (!screenReceiverRegistered) return
+        unregisterReceiver(screenReceiver)
+        screenReceiverRegistered = false
+    }
+
     private fun detachOverlay() {
         overlayView?.let {
             runCatching { windowManager.removeView(it) }
@@ -141,6 +170,7 @@ class MotionCuesService : Service() {
     private fun stopSelfCleanly() {
         collectJob?.cancel()
         collectJob = null
+        unregisterScreenReceiver()
         motionEstimator.stop()
         detachOverlay()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -151,6 +181,7 @@ class MotionCuesService : Service() {
         _isRunning.value = false
         MotionCuesWidgetProvider.updateAll(this)
         scope.cancel()
+        unregisterScreenReceiver()
         motionEstimator.stop()
         detachOverlay()
         super.onDestroy()

@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.view.Choreographer
 import android.view.View
 import dev.davidv.motionsickness.data.DotAppearance
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -32,14 +33,18 @@ import kotlin.random.Random
  * regardless of viewport aspect.
  *
  * Which dots are shown, and how big, depends on the [CueMode] layout (see [sizeFactor]).
+ *
+ * The frame loop only runs while something on screen is moving: once inputs are zero and the
+ * grid has coasted to a stop it stops redrawing, and the next non-zero [setMotion] wakes it.
  */
 class CueOverlayView(context: Context) : View(context) {
 
-    @Volatile private var motionX = 0f
-    @Volatile private var motionY = 0f
-    @Volatile private var motionOutOfPlane = 0f
-    @Volatile private var rotationX = 0f
-    @Volatile private var rotationY = 0f
+    // Latest sensor-derived inputs. Set and read on the main thread only.
+    private var motionX = 0f
+    private var motionY = 0f
+    private var motionOutOfPlane = 0f
+    private var rotationX = 0f
+    private var rotationY = 0f
 
     private var smoothedMotionX = 0f
     private var smoothedMotionY = 0f
@@ -65,7 +70,7 @@ class CueOverlayView(context: Context) : View(context) {
     private var sizeEnvelope = 0f
 
     private var lastFrameNs = 0L
-    private var running = false
+    private var frameScheduled = false
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -99,6 +104,25 @@ class CueOverlayView(context: Context) : View(context) {
         motionOutOfPlane = m.outOfPlane
         rotationX = m.rotationX
         rotationY = m.rotationY
+        if (!frameScheduled && isAttachedToWindow && hasInput()) scheduleFrames()
+    }
+
+    private fun hasInput(): Boolean =
+        motionX != 0f || motionY != 0f || motionOutOfPlane != 0f || rotationX != 0f || rotationY != 0f
+
+    /** True once nothing on screen moves any more: no input, and all motion has decayed. */
+    private fun isSettled(): Boolean =
+        !hasInput() &&
+            abs(smoothedMotionX) < SETTLE_EPS && abs(smoothedMotionY) < SETTLE_EPS &&
+            abs(smoothedMotionOutOfPlane) < SETTLE_EPS &&
+            abs(smoothedRotationX) < SETTLE_EPS && abs(smoothedRotationY) < SETTLE_EPS &&
+            abs(gridVx) < SETTLE_EPS && abs(gridVy) < SETTLE_EPS &&
+            sizeEnvelope < SETTLE_EPS
+
+    private fun scheduleFrames() {
+        frameScheduled = true
+        lastFrameNs = 0L
+        Choreographer.getInstance().postFrameCallback(frameCallback)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -111,20 +135,18 @@ class CueOverlayView(context: Context) : View(context) {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        running = true
-        lastFrameNs = 0L
-        Choreographer.getInstance().postFrameCallback(frameCallback)
+        scheduleFrames()
     }
 
     override fun onDetachedFromWindow() {
-        running = false
+        frameScheduled = false
         Choreographer.getInstance().removeFrameCallback(frameCallback)
         super.onDetachedFromWindow()
     }
 
     private val frameCallback: Choreographer.FrameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
-            if (!running) return
+            if (!frameScheduled) return
             val dt = if (lastFrameNs == 0L) 1f / 60f
                      else ((frameTimeNanos - lastFrameNs) / 1e9f).coerceIn(0.001f, 0.1f)
             lastFrameNs = frameTimeNanos
@@ -132,7 +154,9 @@ class CueOverlayView(context: Context) : View(context) {
             step(dt)
             updateSizeEnvelope(dt)
             invalidate()
-            Choreographer.getInstance().postFrameCallback(this)
+            // Draw this last frame, then sleep until setMotion() brings new input.
+            if (isSettled()) frameScheduled = false
+            else Choreographer.getInstance().postFrameCallback(this)
         }
     }
 
@@ -237,6 +261,10 @@ class CueOverlayView(context: Context) : View(context) {
         private const val SIZE_BOOST_MAX = 8f
 
         private const val SMOOTH_TIME_SEC = 0.05f
+
+        // Residual inputs, grid velocity (iso units/s, i.e. < 1 px/s) and size boost below this
+        // are invisible, so the view counts as settled.
+        private const val SETTLE_EPS = 1e-3f
 
         private fun wrap(v: Float, ext: Float, span: Float): Float {
             var r = (v + ext) % span

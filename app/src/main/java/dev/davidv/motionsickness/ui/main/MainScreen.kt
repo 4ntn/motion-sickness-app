@@ -60,7 +60,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -75,7 +74,6 @@ import dev.davidv.motionsickness.motion.draw
 import dev.davidv.motionsickness.motion.gridPitch
 import dev.davidv.motionsickness.motion.hueToColor
 import dev.davidv.motionsickness.motion.sizeFactor
-import dev.davidv.motionsickness.theme.MyApplicationTheme
 
 @Composable
 fun MainScreen(
@@ -179,7 +177,11 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(stringResource(R.string.main_hue), style = MaterialTheme.typography.bodyMedium)
-                    HueSlider(hue = appearance.hue, onHueChange = cueSettings::setHue)
+                    HueSlider(
+                        hue = appearance.hue,
+                        onHueChange = cueSettings::setHue,
+                        onHueChangeFinished = cueSettings::saveSliders,
+                    )
                 }
             }
         }
@@ -188,6 +190,7 @@ fun MainScreen(
         Slider(
             value = appearance.size,
             onValueChange = cueSettings::setSize,
+            onValueChangeFinished = cueSettings::saveSliders,
             valueRange = DotAppearance.MIN_SIZE..DotAppearance.MAX_SIZE,
         )
 
@@ -195,6 +198,7 @@ fun MainScreen(
         Slider(
             value = appearance.opacity,
             onValueChange = cueSettings::setOpacity,
+            onValueChangeFinished = cueSettings::saveSliders,
             valueRange = DotAppearance.MIN_OPACITY..1f,
         )
     }
@@ -311,6 +315,7 @@ private val hueTrackColors = (0..6).map { Color(hueToColor(it * 60f)) }
 private fun HueSlider(
     hue: Float,
     onHueChange: (Float) -> Unit,
+    onHueChangeFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = SliderDefaults.colors(thumbColor = Color(hueToColor(hue)))
@@ -318,6 +323,7 @@ private fun HueSlider(
     Slider(
         value = hue,
         onValueChange = onHueChange,
+        onValueChangeFinished = onHueChangeFinished,
         modifier = modifier,
         valueRange = 0f..DotAppearance.MAX_HUE,
         colors = colors,
@@ -349,10 +355,4 @@ private fun hasNotificationPermission(context: android.content.Context): Boolean
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
     return ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
         PackageManager.PERMISSION_GRANTED
-}
-
-@Preview(showBackground = true)
-@Composable
-fun MainScreenPreview() {
-    MyApplicationTheme { MainScreen() }
 }

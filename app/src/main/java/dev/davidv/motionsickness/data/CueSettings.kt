@@ -65,22 +65,32 @@ class CueSettings private constructor(private val prefs: SharedPreferences) {
         prefs.edit { putString(KEY_MODE, mode.name) }
     }
 
+    // The slider-driven setters only update the live value, so dragging doesn't write to disk
+    // on every step. Call [saveSliders] once the drag ends.
+
     fun setSize(size: Float) {
         val clamped = size.coerceIn(DotAppearance.MIN_SIZE, DotAppearance.MAX_SIZE)
         _appearance.update { it.copy(size = clamped) }
-        prefs.edit { putFloat(KEY_SIZE, clamped) }
     }
 
     fun setOpacity(opacity: Float) {
         val clamped = opacity.coerceIn(DotAppearance.MIN_OPACITY, 1f)
         _appearance.update { it.copy(opacity = clamped) }
-        prefs.edit { putFloat(KEY_OPACITY, clamped) }
     }
 
     fun setHue(hue: Float) {
         val clamped = hue.coerceIn(0f, DotAppearance.MAX_HUE)
         _appearance.update { it.copy(hue = clamped) }
-        prefs.edit { putFloat(KEY_HUE, clamped) }
+    }
+
+    /** Persists the values set through [setSize], [setOpacity] and [setHue]. */
+    fun saveSliders() {
+        val a = _appearance.value
+        prefs.edit {
+            putFloat(KEY_SIZE, a.size)
+            putFloat(KEY_OPACITY, a.opacity)
+            putFloat(KEY_HUE, a.hue)
+        }
     }
 
     companion object {
