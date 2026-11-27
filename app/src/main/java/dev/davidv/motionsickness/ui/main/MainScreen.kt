@@ -17,6 +17,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -113,7 +115,10 @@ fun MainScreen(
         ActivityResultContracts.RequestPermission(),
     ) { granted -> notifGranted = granted }
 
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Text(stringResource(R.string.main_title), style = MaterialTheme.typography.headlineSmall)
         Text(stringResource(R.string.main_subtitle), style = MaterialTheme.typography.bodyMedium)
 

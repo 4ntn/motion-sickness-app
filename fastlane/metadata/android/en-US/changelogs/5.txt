@@ -1,0 +1,2 @@
+- New home screen widget to toggle motion cues on and off
+- The settings screen now scrolls on small screens
