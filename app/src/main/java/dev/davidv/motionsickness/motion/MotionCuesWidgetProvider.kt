@@ -9,7 +9,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import android.widget.RemoteViews
 import dev.davidv.motionsickness.R
 
@@ -30,23 +29,7 @@ class MotionCuesWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == ACTION_TOGGLE) {
-            if (MotionCuesService.isRunning.value) {
-                MotionCuesService.stop(context)
-            } else {
-                runCatching { MotionCuesService.start(context) }
-                    .onFailure { Log.w(TAG, "Could not start motion cues from widget", it) }
-            }
-            return
-        }
-        super.onReceive(context, intent)
-    }
-
     companion object {
-        private const val TAG = "MotionCuesWidget"
-        const val ACTION_TOGGLE = "dev.davidv.motionsickness.ACTION_TOGGLE_WIDGET"
-
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context) ?: return
             val ids = manager.getAppWidgetIds(
@@ -57,8 +40,8 @@ class MotionCuesWidgetProvider : AppWidgetProvider() {
         }
 
         private fun buildViews(context: Context, running: Boolean): RemoteViews {
-            val toggleIntent = Intent(context, MotionCuesWidgetProvider::class.java)
-                .setAction(ACTION_TOGGLE)
+            val toggleIntent = Intent(context, MotionCuesToggleReceiver::class.java)
+                .setAction(MotionCuesToggleReceiver.ACTION_TOGGLE)
             val togglePi = PendingIntent.getBroadcast(
                 context, 0, toggleIntent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
