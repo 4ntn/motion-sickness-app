@@ -5,25 +5,29 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bg_inactive"
     android:gravity="center"
-    android:orientation="vertical"
-    android:padding="4dp">
+    android:orientation="vertical">
 
+    <!-- Icon-sized button, so the colored area matches an app icon regardless of how large
+         the launcher makes the widget cell. -->
     <ImageView
         android:id="@+id/widget_icon"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:importantForAccessibility="no"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:background="@drawable/widget_bg_inactive"
+        android:scaleType="fitCenter"
         android:src="@drawable/ic_launcher_foreground" />
 
+    <!-- Invisible placeholder the size of a launcher label. Launchers center the icon + label
+         block in each cell, so reserving the same space below lines the icon up with the
+         neighbouring app icons. Uses sp so it follows the system font scale like real labels. -->
     <TextView
-        android:id="@+id/widget_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:ellipsize="end"
+        android:layout_marginTop="4dp"
+        android:importantForAccessibility="no"
         android:maxLines="1"
         android:text="@string/motion_cues_tile_label"
-        android:textColor="#FFFFFFFF"
-        android:textSize="12sp" />
+        android:textSize="12sp"
+        android:visibility="invisible" />
 </LinearLayout>

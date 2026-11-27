@@ -65,7 +65,7 @@ class MotionCuesWidgetProvider : AppWidgetProvider() {
             )
             return RemoteViews(context.packageName, R.layout.widget_motion_cues).apply {
                 setInt(
-                    R.id.widget_root,
+                    R.id.widget_icon,
                     "setBackgroundResource",
                     if (running) R.drawable.widget_bg_active else R.drawable.widget_bg_inactive,
                 )
