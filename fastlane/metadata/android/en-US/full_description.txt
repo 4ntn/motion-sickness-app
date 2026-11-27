@@ -4,7 +4,7 @@ The dots move with the vehicle's acceleration and turns, so what you see matches
 
 Features:
 <ul>
-<li>Start and stop from the app, the Quick Settings tile, or the notification</li>
+<li>Start and stop from the app, the Quick Settings tile, the home screen widget, or the notification</li>
 <li>Layouts: Columns, Edges, or Focus (keeps the center of the screen clear), with a live preview</li>
 <li>Dot styles: white, black, half white and half black, outlined, or any color you pick</li>
 <li>Adjustable dot size and opacity</li>
