@@ -8,6 +8,9 @@
     <string name="motion_cues_notification_text">Drawing motion dots over other apps</string>
     <string name="motion_cues_notification_stop">Stop</string>
     <string name="motion_cues_tile_label">Motion cues</string>
+    <string name="widget_description">Tap to turn motion cues on or off</string>
+    <string name="widget_state_on">Motion cues on</string>
+    <string name="widget_state_off">Motion cues off</string>
 
     <string name="main_title">Vehicle motion cues</string>
     <string name="main_subtitle">Reduces motion sickness by showing dots that drift with the car\'s motion.</string>

@@ -9,7 +9,7 @@ It works similarly to vehicle motion cues on iPhone and aims to reduce motion si
 ## Features
 
 - **Motion-driven overlay**: dots are drawn over other apps and move with the vehicle's acceleration and turns. Works in portrait and landscape, including with rotation lock on. Touches pass through to the app underneath.
-- **Quick start and stop**: toggle the cues from the app, from the Quick Settings tile, or with the Stop button in the ongoing notification.
+- **Quick start and stop**: toggle the cues from the app, from the Quick Settings tile, from the home screen widget, or with the Stop button in the ongoing notification.
 - **Layouts**: choose where the dots appear, with a live preview of each option:
   - **Columns**: bands along the left and right edges.
   - **Edges**: bands along all four edges.

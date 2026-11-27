@@ -80,6 +80,7 @@ class MotionCuesService : Service() {
             }
         }
         _isRunning.value = true
+        MotionCuesWidgetProvider.updateAll(this)
         return START_STICKY
     }
 
@@ -148,6 +149,7 @@ class MotionCuesService : Service() {
 
     override fun onDestroy() {
         _isRunning.value = false
+        MotionCuesWidgetProvider.updateAll(this)
         scope.cancel()
         motionEstimator.stop()
         detachOverlay()
